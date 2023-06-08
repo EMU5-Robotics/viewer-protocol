@@ -18,21 +18,28 @@ pub enum DataTier {
 #[repr(u8)]
 pub enum DataLength {
 	Single,
-	Fixed,
+	Fixed(u16),
 	Variable,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Parse)]
 #[repr(u8)]
 pub enum DataType {
-	U8,
+	Boolean,
+	F32,
+	F64,
+	I128,
+	I16,
+	I32,
+	I64,
+	I8,
+	U128,
 	U16,
 	U32,
 	U64,
-	F32,
-	F64,
-	Vec3,
+	U8,
 	Vec2,
+	Vec3,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Parse)]
@@ -48,9 +55,22 @@ pub struct DataInit {
 	robot_ident: String,
 	data_ident: String,
 	data_tier: DataTier,
-	data_type: DataType,
-	data_length: DataLength,
+	data_info: Vec<(DataType, DataLength)>,
 	availability: Availability,
+}
+
+impl Parse for (DataType, DataLength) {
+	fn serialise<'a>(&self) -> Result<Vec<u8>, ParserError<&'a [u8]>> {
+		let mut bytes = Vec::new();
+		bytes.extend(self.0.serialise()?);
+		bytes.extend(self.1.serialise()?);
+		Ok(bytes)
+	}
+	fn deserialise(input: &[u8]) -> IResult<&[u8], Self, ParserError<&[u8]>> {
+		let (input, data_type) = DataType::deserialise(input)?;
+		let (input, data_length) = DataLength::deserialise(input)?;
+		Ok((input, (data_type, data_length)))
+	}
 }
 
 impl Parse for DataInit {
@@ -59,9 +79,8 @@ impl Parse for DataInit {
 
 		bytes.extend(self.robot_ident.serialise()?);
 		bytes.extend(self.data_ident.serialise()?);
-		bytes.push(self.data_tier as u8);
-		bytes.push(self.data_type as u8);
-		bytes.push(self.data_length as u8);
+		bytes.extend(self.data_tier.serialise()?);
+		bytes.extend(self.data_info.serialise()?);
 		bytes.extend(self.availability.serialise()?);
 
 		Ok(bytes)
@@ -73,9 +92,7 @@ impl Parse for DataInit {
 
 		let (input, data_tier) = DataTier::deserialise(input)?;
 
-		let (input, data_type) = DataType::deserialise(input)?;
-
-		let (input, data_length) = DataLength::deserialise(input)?;
+		let (input, data_info) = <Vec<(DataType, DataLength)>>::deserialise(input)?;
 
 		let (input, availability) = Availability::deserialise(input)?;
 
@@ -85,8 +102,7 @@ impl Parse for DataInit {
 				robot_ident,
 				data_ident,
 				data_tier,
-				data_type,
-				data_length,
+				data_info,
 				availability,
 			},
 		))

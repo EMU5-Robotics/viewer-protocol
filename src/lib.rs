@@ -5,15 +5,13 @@ use crate::{
 };
 
 use derive_new::new;
-use nom::{bytes::streaming::tag, IResult};
+use nom::IResult;
 use proc::Parse;
 use std::time::Duration;
 
 pub mod data;
 pub mod datainit;
 pub mod parse;
-
-const PACKET_START: [u8; 10] = [0x7c, 0xa1, 0xd8, 0x18, 0xb1, 0x46, 0x92, 0xce, 0xab, 0x3f];
 
 /// Top level Packet structure
 ///
@@ -32,15 +30,12 @@ impl Parse for Packet {
 	fn serialise<'a>(&self) -> Result<Vec<u8>, ParserError<&'a [u8]>> {
 		let mut bytes = Vec::new();
 
-		bytes.extend(PACKET_START);
 		bytes.extend(self.timestamp.serialise()?);
 		bytes.extend(self.data.serialise()?);
 
 		Ok(bytes)
 	}
 	fn deserialise(input: &[u8]) -> IResult<&[u8], Self, ParserError<&[u8]>> {
-		let (input, _) = tag(PACKET_START)(input)?;
-
 		let (input, timestamp) = Duration::deserialise(input)?;
 		let (input, data) = PacketData::deserialise(input)?;
 
@@ -85,7 +80,7 @@ pub enum PacketData {
 	Data(Data),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, new)]
 pub struct DataRemove {
 	robot_ident: String,
 	data_ident: String,
@@ -135,8 +130,11 @@ mod tests {
 					"Robot 1".to_owned(),
 					"Motor 1".to_owned(),
 					DataTier::Raw,
-					DataType::F32,
-					DataLength::Single,
+					vec![
+						(DataType::F32, DataLength::Single),
+						(DataType::Vec3, DataLength::Variable),
+						(DataType::I32, DataLength::Fixed(30)),
+					],
 					Availability::Always,
 				)),
 			),
@@ -147,6 +145,10 @@ mod tests {
 			Packet::new(
 				timestamp,
 				PacketData::Data(Data::new(1, 4u16.to_be_bytes().to_vec())),
+			),
+			Packet::new(
+				timestamp,
+				PacketData::DataRemove(DataRemove::new("Robot 1".to_owned(), "IMU 1".to_owned())),
 			),
 			Packet::new(timestamp, PacketData::RobotRemove("Robot 1".to_owned())),
 		];
